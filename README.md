@@ -4,9 +4,6 @@
 
 ![homepage-paymybuddy](src/main/resources/readme/home.png)
 
-## Create the docker image by following the steps mentioned in *build_docker.md* file
-
-
 ## Create the resources
 ```
 kubectl apply -f k8s/
@@ -35,6 +32,19 @@ kubectl logs -n paymybuddy -l app=paymybuddy
 
 # Verify the connexion to MySQL database
 kubectl exec -it -n paymybuddy deployment/paymybuddy -- env | grep SPRING
+
+# Verify the Ingress
+kubectl get ingress -n paymybuddy
+
+# Obtain the Ingress Controller's IP
+INGRESS_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+echo "Ingress IP: $INGRESS_IP"
+
+# Add the new hostname to the **/etc/hosts** file
+echo "$INGRESS_IP paymybuddy.local" | sudo tee -a /etc/hosts
+
+# Test the app
+curl http://paymybuddy.local
 ```
 
 Recall that the secrets can be created via the CLI:

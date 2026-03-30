@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: paymybuddy
-        image: your-registry/paymybuddy:latest
+        image: kevinlagaza/paymybuddy
         env:
         - name: SPRING_DATASOURCE_USERNAME
           valueFrom:
