@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: paymybuddy-ingress
+  namespace: paymybuddy
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+  - host: paymybuddy.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: paymybuddy
+            port:
+              number: 8080

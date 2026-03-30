@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: paymybuddy
+  namespace: paymybuddy
+  labels:
+    app: paymybuddy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: paymybuddy
+  template:
+    metadata:
+      labels:
+        app: paymybuddy
+    spec:
+      containers:
+      - name: paymybuddy
+        image: kevinlagaza/paymybuddy
+        env:
+        - name: SPRING_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-root-password
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-root-password
+        - name: SPRING_DATASOURCE_URL
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: spring-datasource-url
+        ports:
+        - containerPort: 8080
+          name: http
+        volumeMounts:
+        - name: paymybuddy-data
+          mountPath: /data
+      volumes:
+      - name: paymybuddy-data
+        hostPath:
+          path: /data
+          type: DirectoryOrCreate
