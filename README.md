@@ -1,8 +1,7 @@
 # PayMyBuddy
 
-## Editer le Dockerfile pour builder l'image de paymybuddy suivant les instructions de [build_docker.md](./build_docker.md)
-
-![homepage-paymybuddy](src/main/resources/readme/home.png)
+## Build the docker image
+To do so, follow the instructions mentioned in [build_docker.md](./build_docker.md).
 
 ## Create the resources
 ```
@@ -57,4 +56,4 @@ kubectl create secret generic mysql-secret \
   --from-literal=mysql-password=paymybuddy \
   --from-literal=spring-datasource-url=jdbc:mysql://mysql:3306/paymybuddy
 ```
-
+![homepage-paymybuddy](src/main/resources/readme/home.png)
