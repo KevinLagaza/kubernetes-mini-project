@@ -4,8 +4,9 @@ metadata:
   name: paymybuddy-ingress
   namespace: paymybuddy
   annotations:
-    spec.ingressClassName: nginx
+    kubernetes.io/ingress.class: nginx
 spec:
+  ingressClassName: nginx
   rules:
   - host: paymybuddy.local
     http:
