@@ -15,20 +15,22 @@ spec:
       labels:
         app: paymybuddy
     spec:
+      imagePullSecrets:
+      - name: dockerhub-secret
       containers:
       - name: paymybuddy
-        image: kevinlagaza/paymybuddy
+        image: kevinlagaza/paymybuddy:21
         env:
         - name: SPRING_DATASOURCE_USERNAME
           valueFrom:
             secretKeyRef:
               name: mysql-secret
-              key: mysql-root-password
+              key: mysql-user
         - name: SPRING_DATASOURCE_PASSWORD
           valueFrom:
             secretKeyRef:
               name: mysql-secret
-              key: mysql-root-password
+              key: mysql-password
         - name: SPRING_DATASOURCE_URL
           valueFrom:
             secretKeyRef:
