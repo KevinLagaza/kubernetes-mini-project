@@ -78,7 +78,7 @@ A complete guide to deploy the PayMyBuddy application on Kubernetes with MySQL d
 
 ### Step 1: Build Docker Image
 
-Follow the instructions in [build_docker.md](./build_docker.md) to build and push the Docker image.
+Follow the instructions in [build_docker.md](./build_docker.md) to build and push the Docker image to your private registry.
 
 ---
 
