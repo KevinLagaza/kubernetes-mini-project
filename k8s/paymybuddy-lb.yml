@@ -1,0 +1,17 @@
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: paymybuddy-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  - 172.30.1.200-172.30.1.250
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: paymybuddyL2Advertisement
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+  - paymybuddy-pool
