@@ -14,8 +14,11 @@ A complete guide to deploy the PayMyBuddy application on Kubernetes with MySQL d
   - [Step 3: Configure Secrets](#step-3-configure-secrets)
   - [Step 4: Install MetalLB](#step-4-install-metallb)
   - [Step 5: Install Ingress Controller](#step-5-install-ingress-controller)
-  - [Step 6: Deploy Resources](#step-6-deploy-resources)
+  - [Step 6: Configure Persistent Storage](#step-6-configure-persistent-storage)
+  - [Step 7: Deploy MySQL with Database Initialization](#step-7-deploy-mysql-with-database-initialization)
+  - [Step 8: Deploy PayMyBuddy Application](#step-8-deploy-paymybuddy-application)
 - [Verification](#-verification)
+- [Accessing the Application on KillerCoda](#-accessing-the-application-on-killercoda)
 - [Troubleshooting](#-troubleshooting)
 
 ---
@@ -69,7 +72,23 @@ A complete guide to deploy the PayMyBuddy application on Kubernetes with MySQL d
 ┌───────────────┐                    ┌───────────────┐
 │  PayMyBuddy   │                    │    MySQL      │
 │     Pod       │                    │     Pod       │
-└───────────────┘                    └───────────────┘
+│               │                    │  (with PVC)   │
+│ - readiness   │                    │               │
+│ - liveness    │                    │ - readiness   │
+└───────────────┘                    │               │      
+                                     └───────────────┘
+                                             │
+                                             ▼
+                                     ┌───────────────┐
+                                     │     PVC       │
+                                     │  mysql-pvc    │
+                                     └───────────────┘
+                                             │
+                                             ▼
+                                     ┌───────────────┐
+                                     │      PV       │
+                                     │  (Dynamic)    │
+                                     └───────────────┘
 ```
 
 ---
@@ -81,6 +100,7 @@ A complete guide to deploy the PayMyBuddy application on Kubernetes with MySQL d
 Follow the instructions in [build_docker.md](./build_docker.md) to build and push the Docker image to your private registry.
 
 ---
+
 ### Step 2: Create Namespace
 ```bash
 cd k8s/
@@ -121,10 +141,10 @@ kubectl apply -f mysql-secrets.yml
 > kubectl create secret generic mysql-secret \
 >   --namespace=paymybuddy \
 >   --from-literal=mysql-root-password=rootpassword \
->   --from-literal=mysql-database=paymybuddy \
+>   --from-literal=mysql-database=db_paymybuddy \
 >   --from-literal=mysql-user=paymybuddy \
 >   --from-literal=mysql-password=paymybuddy \
->   --from-literal=spring-datasource-url=jdbc:mysql://mysql:3306/paymybuddy
+>   --from-literal=spring-datasource-url=jdbc:mysql://mysql:3306/db_paymybuddy
 > ```
 
 ---
@@ -178,12 +198,95 @@ kubectl wait --namespace ingress-nginx \
 
 ---
 
-### Step 6: Deploy Resources
+### Step 6: Configure Persistent Storage
 
-Deploy all Kubernetes resources:
+#### 📦 Install Local Path Provisioner
+
+For dynamic PV provisioning on bare-metal or KillerCoda environments:
 ```bash
-kubectl apply -f .
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.26/deploy/local-path-storage.yaml
+
+# Verify StorageClass
+kubectl get storageclass
 ```
+
+#### 📦 Create PersistentVolumeClaim for MySQL
+```bash
+kubectl apply -f mysql-pvc.yml
+```
+
+Verify the PVC is created:
+```bash
+kubectl get pvc -n paymybuddy
+```
+
+![PV and PVC](imgs/pvc-pv.png)
+
+---
+
+### Step 7: Deploy MySQL with Database Initialization
+
+The MySQL deployment includes:
+- **InitContainer 1:** Downloads SQL scripts from GitHub repository
+- **InitContainer 2:** Initializes MySQL and executes SQL scripts
+- **Main Container:** Runs MySQL with readiness and liveness probes
+```bash
+kubectl apply -f mysql-deployment.yml
+kubectl apply -f mysql-service.yml
+```
+
+#### 🔄 Database Initialization Flow
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      POD INITIALIZATION                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. InitContainer: download-sql (alpine/git)                    │
+│     ├── Clone repository from GitHub                            │
+│     ├── Copy SQL files to /initdb                               │
+│     └── Exit                                                    │
+│                         │                                       │
+│                         ▼                                       │
+│  2. InitContainer: init-mysql (mysql:8.0)                       │
+│     ├── Start MySQL in background                               │
+│     ├── Wait for MySQL to be ready                              │
+│     ├── Check if tables exist                                   │
+│     ├── Execute SQL scripts (create.sql, data.sql)              │
+│     ├── Verify tables created                                   │
+│     ├── Shutdown MySQL                                          │
+│     └── Exit                                                    │
+│                         │                                       │
+│                         ▼                                       │
+│  3. Container: mysql (mysql:8.0)                                │
+│     ├── Start MySQL with initialized data                       │
+│     ├── readinessProbe: mysqladmin ping                         │
+│                                                                 │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### 🩺 MySQL Health Probes
+
+| Probe | Type | Command | Initial Delay | Period |
+|-------|------|---------|---------------|--------|
+| readinessProbe | exec | `mysqladmin ping` | 30s | 10s |
+
+---
+
+### Step 8: Deploy PayMyBuddy Application
+```bash
+kubectl apply -f paymybuddy-deployment.yml
+kubectl apply -f paymybuddy-service.yml
+kubectl apply -f paymybuddy-ingress.yml
+kubectl apply -f paymybuddy-lb.yml
+```
+
+#### 🩺 PayMyBuddy Health Probes
+
+| Probe | Type | Path | Initial Delay | Period |
+|-------|------|------|---------------|--------|
+| readinessProbe | httpGet | /login | 60s | 10s |
+| livenessProbe | httpGet | /login | 90s | 30s |
 
 ---
 
@@ -206,6 +309,20 @@ kubectl get secret mysql-secret -n paymybuddy -o jsonpath='{.data.mysql-root-pas
 
 ---
 
+### 🔍 Check Persistent Storage
+```bash
+# Check PVC status
+kubectl get pvc -n paymybuddy
+
+# Check PV status
+kubectl get pv
+
+# Describe PVC for details
+kubectl describe pvc mysql-pvc -n paymybuddy
+```
+
+---
+
 ### 🔍 Check Resources
 ```bash
 # List all resources in the namespace
@@ -216,10 +333,32 @@ kubectl get all -n paymybuddy
 
 ---
 
+### 🔍 Check Database Initialization
+```bash
+# Check download-sql InitContainer logs
+kubectl logs -n paymybuddy -l app=mysql -c download-sql
+
+# Check init-mysql InitContainer logs
+kubectl logs -n paymybuddy -l app=mysql -c init-mysql
+
+# Check MySQL container logs
+kubectl logs -n paymybuddy -l app=mysql -c mysql
+```
+
+![database init start](imgs/init-db.png)
+
+![database init 1](imgs/init-db-part1.png)
+
+![database init 2](imgs/init-db-part2.png)
+
+![database init 3](imgs/init-db-part3.png)
+
+---
+
 ### 🔍 Check Database Connection
 ```bash
-# Connect to MySQL pod
-kubectl exec -it -n paymybuddy deployment/mysql -- mysql -u paymybuddy -ppaymybuddy -e "SHOW DATABASES;"
+# Connect to MySQL pod and verify tables
+kubectl exec -it -n paymybuddy deployment/mysql -- mysql -u paymybuddy -ppaymybuddy -e "SHOW DATABASES; USE paymybuddy; SHOW TABLES; SELECT * FROM user;"
 
 # Verify Spring datasource configuration
 kubectl exec -it -n paymybuddy deployment/paymybuddy -- env | grep SPRING
@@ -229,23 +368,15 @@ kubectl exec -it -n paymybuddy deployment/paymybuddy -- env | grep SPRING
 
 ---
 
-### 🔍 Check Database Initialization
-
+### 🔍 Check Health Probes Status
 ```bash
-kubectl logs -n paymybuddy -l app=mysql -c download-sql -f
+# Check pod conditions (Ready status depends on probes)
+kubectl get pods -n paymybuddy -o wide
 
-kubectl logs -n paymybuddy -l app=mysql -c init-mysql -f
-
-kubectl logs -n paymybuddy -l app=mysql -c mysql -f
+# Describe pod to see probe status
+kubectl describe pod -n paymybuddy -l app=mysql | grep -A 10 "Conditions"
+kubectl describe pod -n paymybuddy -l app=paymybuddy | grep -A 10 "Conditions"
 ```
-
-![initialization sql files](imgs/check-sql-files.png)
-
-![database init 1](imgs/init-db-part1.png)
-
-![database init 2](imgs/init-db-part2.png)
-
-![database init 3](imgs/init-db-part3.png)
 
 ---
 
@@ -272,7 +403,7 @@ kubectl get ingress -n paymybuddy
 
 ---
 
-### 🌐 Access the Application
+### 🌐 Test Application via CLI
 ```bash
 # Get Ingress Controller IP
 INGRESS_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
@@ -294,6 +425,61 @@ curl -v --connect-timeout 10 http://paymybuddy.local
 
 ---
 
+## 🖥️ Accessing the Application on KillerCoda
+
+Since KillerCoda runs on a remote VM, you cannot modify your local `/etc/hosts` file. Use one of these methods instead:
+
+### Method 1: Port Forward (Recommended)
+```bash
+# Forward port 8080 to the PayMyBuddy service
+kubectl port-forward -n paymybuddy svc/paymybuddy 8080:8080 --address 0.0.0.0 &
+```
+
+Then access the application:
+
+1. Click on the **"Traffic / Ports"** icon in KillerCoda
+2. Enter port **8080**
+3. Click **"Access"** to open the application in a new tab
+
+![port forward](imgs/port-forwarding.png)
+
+![port forward step 1](imgs/app-web-step1.png)
+
+![port forward step 2](imgs/app-web-step2.png)
+
+![application login](imgs/app-web-final1.png)
+
+![application home](imgs/app-web-final2.png)
+
+---
+
+### Method 2: NodePort
+```bash
+# Change service type to NodePort
+kubectl patch svc paymybuddy -n paymybuddy -p '{"spec": {"type": "NodePort"}}'
+
+# Get the NodePort
+NODE_PORT=$(kubectl get svc paymybuddy -n paymybuddy -o jsonpath='{.spec.ports[0].nodePort}')
+echo "NodePort: $NODE_PORT"
+```
+
+Then access via KillerCoda:
+
+1. Click on **"Traffic / Ports"**
+2. Enter the **NodePort** displayed (e.g., 32xxx)
+3. Click **"Access"**
+
+---
+
+### 📊 KillerCoda Access Methods Summary
+
+| Method | Command | Port to Access |
+|--------|---------|----------------|
+| Port Forward | `kubectl port-forward -n paymybuddy svc/paymybuddy 8080:8080 --address 0.0.0.0 &` | 8080 |
+| NodePort | `kubectl patch svc paymybuddy -n paymybuddy -p '{"spec": {"type": "NodePort"}}'` | NodePort (32xxx) |
+
+---
+
 ## 🛠️ Troubleshooting
 
 | Issue | Solution |
@@ -303,6 +489,10 @@ curl -v --connect-timeout 10 http://paymybuddy.local
 | Ingress class `NONE` | Add `ingressClassName: nginx` to Ingress manifest |
 | 404 Not Found | Verify Ingress rules and service endpoints |
 | Connection timeout | Check pod status and application logs |
+| PVC `Pending` | Verify StorageClass exists and is default |
+| MySQL tables not created | Check init-mysql logs for errors |
+| `Access denied` in init-mysql | Wait longer for MySQL root user initialization |
+| readinessProbe failing | Increase `initialDelaySeconds` |
 
 ### Useful Commands
 ```bash
@@ -312,11 +502,26 @@ kubectl get pods -n paymybuddy
 # View pod logs
 kubectl logs -n paymybuddy -l app=paymybuddy
 
+# View InitContainer logs
+kubectl logs -n paymybuddy -l app=mysql -c download-sql
+kubectl logs -n paymybuddy -l app=mysql -c init-mysql
+
 # Describe pod for events
 kubectl describe pod -n paymybuddy -l app=paymybuddy
 
 # Check endpoints
 kubectl get endpoints -n paymybuddy
+
+# Check PVC and PV
+kubectl get pvc -n paymybuddy
+kubectl get pv
+
+# Check StorageClass
+kubectl get storageclass
+
+# Force restart a deployment
+kubectl rollout restart deployment/mysql -n paymybuddy
+kubectl rollout restart deployment/paymybuddy -n paymybuddy
 ```
 
 ---
@@ -324,14 +529,16 @@ kubectl get endpoints -n paymybuddy
 ## 📁 Project Structure
 ```
 k8s/
-├── namespace.yml
-├── mysql-secrets.yml
-├── mysql-deployment.yml
-├── mysql-service.yml
-├── paymybuddy-deployment.yml
-├── paymybuddy-service.yml
-├── paymybuddy-ingress.yml
-└── paymybuddy-lb.yml
+├── namespace.yml                 # Namespace definition
+├── mysql-secrets.yml             # MySQL credentials
+├── mysql-pvc.yml                 # PersistentVolumeClaim for MySQL
+├── mysql-deployment.yml          # MySQL deployment with InitContainers
+├── mysql-service.yml             # MySQL ClusterIP service
+├── paymybuddy-deployment.yml     # PayMyBuddy deployment with probes
+├── paymybuddy-service.yml        # PayMyBuddy ClusterIP service
+├── paymybuddy-ingress.yml        # Ingress rules
+├── paymybuddy-lb.yml             # MetalLB IP pool configuration
+└── imgs/                         # Documentation images
 ```
 
 ---
@@ -341,6 +548,8 @@ k8s/
 - [Kubernetes Documentation](https://kubernetes.io/docs/)
 - [MetalLB Documentation](https://metallb.universe.tf/)
 - [Nginx Ingress Controller](https://kubernetes.github.io/ingress-nginx/)
+- [Local Path Provisioner](https://github.com/rancher/local-path-provisioner)
+- [KillerCoda Platform](https://killercoda.com/)
 
 ---
 
