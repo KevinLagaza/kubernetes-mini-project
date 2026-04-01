@@ -17,6 +17,19 @@ spec:
       labels:
         app: mysql
     spec:
+      initContainers:
+      - name: download-sql
+        image: alpine/git:latest
+        command:
+        - sh
+        - -c
+        - |
+          git clone --depth 1 https://github.com/KevinLagaza/paymybuddy.git /tmp/repo
+          cp -r /tmp/repo/src/main/resources/database/*.sql /initdb/
+          ls -la /initdb/
+        volumeMounts:
+        - name: initdb-scripts
+          mountPath: /initdb
       containers:
       - name: mysql
         image: mysql:8.0
@@ -47,13 +60,9 @@ spec:
         readinessProbe:
           exec:
             command:
-            - mysqladmin
-            - ping
-            - -h
-            - localhost
-            - -u
-            - root
-            - -p$(MYSQL_ROOT_PASSWORD)
+            - sh
+            - -c
+            - mysqladmin ping -h localhost -u root -p$MYSQL_ROOT_PASSWORD
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
@@ -61,15 +70,20 @@ spec:
           failureThreshold: 3
         resources:
           requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
             memory: "512Mi"
             cpu: "500m"
-          limits:
-            memory: "1Gi"
-            cpu: "1000m"
         volumeMounts:
         - name: mysql-persistent-storage
           mountPath: /var/lib/mysql
+        - name: initdb-scripts
+          mountPath: /docker-entrypoint-initdb.d
+          readOnly: true
       volumes:
       - name: mysql-persistent-storage
         persistentVolumeClaim:
           claimName: mysql-pvc
+      - name: initdb-scripts
+        emptyDir: {}

@@ -81,7 +81,6 @@ A complete guide to deploy the PayMyBuddy application on Kubernetes with MySQL d
 Follow the instructions in [build_docker.md](./build_docker.md) to build and push the Docker image to your private registry.
 
 ---
-
 ### Step 2: Create Namespace
 ```bash
 cd k8s/
