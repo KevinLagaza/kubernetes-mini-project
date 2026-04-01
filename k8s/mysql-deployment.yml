@@ -19,7 +19,7 @@ spec:
     spec:
       initContainers:
       - name: download-sql
-        image: alpine/git:latest
+        image: alpine/git:2.52.0
         command:
         - sh
         - -c
