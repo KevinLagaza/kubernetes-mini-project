@@ -24,12 +24,115 @@ spec:
         - sh
         - -c
         - |
+          set -e
+          echo "=== Cloning repository ==="
           git clone --depth 1 https://github.com/KevinLagaza/kubernetes-mini-project.git /tmp/repo
-          cp -r /tmp/repo/src/main/resources/database/*.sql /initdb/
+          
+          echo "=== Copying SQL files ==="
+          cp /tmp/repo/src/main/resources/database/*.sql /initdb/
+          
+          echo "=== Files copied ==="
           ls -la /initdb/
         volumeMounts:
         - name: initdb-scripts
           mountPath: /initdb
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+      - name: init-mysql
+        image: mysql:8.0
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          
+          echo "=== Starting MySQL initialization ==="
+          docker-entrypoint.sh mysqld &
+          MYSQL_PID=$!
+          
+          echo "=== Waiting for MySQL to initialize (this may take a while) ==="
+          sleep 30
+          
+          # Wait for MySQL to be ready and for the root user to be configured
+          MAX_TRIES=60
+          TRIES=0
+          until mysql -h localhost -u root -p"$MYSQL_ROOT_PASSWORD" -e "SELECT 1" >/dev/null 2>&1; do
+            TRIES=$((TRIES + 1))
+            if [ $TRIES -ge $MAX_TRIES ]; then
+              echo "ERROR: MySQL failed to initialize after $MAX_TRIES attempts"
+              exit 1
+            fi
+            echo "Waiting for MySQL root user to be ready... (attempt $TRIES/$MAX_TRIES)"
+            sleep 5
+          done
+          echo "MySQL is fully initialized!"
+          
+          echo "=== Checking if initialization is needed ==="
+          TABLES=$(mysql -h localhost -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -N -e "SHOW TABLES;" 2>/dev/null | wc -l)
+          
+          if [ "$TABLES" -eq 0 ]; then
+            echo "=== No tables found. Executing SQL scripts ==="
+            for file in /initdb/*.sql; do
+              if [ -f "$file" ]; then
+                echo "Executing: $file"
+                mysql -h localhost -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" < "$file"
+                echo "Completed: $file"
+              fi
+            done
+            echo "=== All SQL scripts executed ==="
+          else
+            echo "=== Tables already exist ($TABLES tables). Skipping initialization ==="
+          fi
+          
+          echo "=== Verification ==="
+          mysql -h localhost -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "SHOW TABLES;"
+          
+          echo "=== Shutting down MySQL gracefully ==="
+          mysqladmin -h localhost -u root -p"$MYSQL_ROOT_PASSWORD" shutdown
+          
+          # Attendre l'arrêt complet
+          wait $MYSQL_PID 2>/dev/null || true
+          
+          echo "=== Init completed successfully ==="
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-root-password
+        - name: MYSQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-database
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-user
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-password
+        volumeMounts:
+        - name: mysql-persistent-storage
+          mountPath: /var/lib/mysql
+        - name: initdb-scripts
+          mountPath: /initdb
+          readOnly: true
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
       containers:
       - name: mysql
         image: mysql:8.0

@@ -235,7 +235,9 @@ kubectl exec -it -n paymybuddy deployment/paymybuddy -- env | grep SPRING
 kubectl exec -n paymybuddy deployment/mysql -- ls -la /docker-entrypoint-initdb.d/
 ```
 
-![database Initialization](imgs/check-sql-files.png)
+![initialization sql files](imgs/check-sql-files.png)
+
+![database Initialization](imgs/init-db.png)
 
 ---
 
