@@ -232,12 +232,20 @@ kubectl exec -it -n paymybuddy deployment/paymybuddy -- env | grep SPRING
 ### 🔍 Check Database Initialization
 
 ```bash
-kubectl exec -n paymybuddy deployment/mysql -- ls -la /docker-entrypoint-initdb.d/
+kubectl logs -n paymybuddy -l app=mysql -c download-sql -f
+
+kubectl logs -n paymybuddy -l app=mysql -c init-mysql -f
+
+kubectl logs -n paymybuddy -l app=mysql -c mysql -f
 ```
 
 ![initialization sql files](imgs/check-sql-files.png)
 
-![database Initialization](imgs/init-db.png)
+![database init 1](imgs/init-db-part1.png)
+
+![database init 2](imgs/init-db-part2.png)
+
+![database init 3](imgs/init-db-part3.png)
 
 ---
 
