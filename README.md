@@ -226,44 +226,14 @@ kubectl get pvc -n paymybuddy
 
 ### Step 7: Deploy MySQL with Database Initialization
 
-The MySQL deployment includes:
-- **InitContainer 1:** Downloads SQL scripts from GitHub repository
-- **InitContainer 2:** Initializes MySQL and executes SQL scripts
-- **Main Container:** Runs MySQL with readiness and liveness probes
 ```bash
+# Apply the configMap
+kubectl apply -f mysql-initdb-configmap.yml
+# Deploy MySQL database
 kubectl apply -f mysql-deployment.yml
 kubectl apply -f mysql-service.yml
 ```
 
-#### 🔄 Database Initialization Flow
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      POD INITIALIZATION                         │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  1. InitContainer: download-sql (alpine/git)                    │
-│     ├── Clone repository from GitHub                            │
-│     ├── Copy SQL files to /initdb                               │
-│     └── Exit                                                    │
-│                         │                                       │
-│                         ▼                                       │
-│  2. InitContainer: init-mysql (mysql:8.0)                       │
-│     ├── Start MySQL in background                               │
-│     ├── Wait for MySQL to be ready                              │
-│     ├── Check if tables exist                                   │
-│     ├── Execute SQL scripts (create.sql, data.sql)              │
-│     ├── Verify tables created                                   │
-│     ├── Shutdown MySQL                                          │
-│     └── Exit                                                    │
-│                         │                                       │
-│                         ▼                                       │
-│  3. Container: mysql (mysql:8.0)                                │
-│     ├── Start MySQL with initialized data                       │
-│     ├── readinessProbe: mysqladmin ping                         │
-│                                                                 │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
 
 #### 🩺 MySQL Health Probes
 
@@ -333,38 +303,22 @@ kubectl get all -n paymybuddy
 
 ---
 
-### 🔍 Check Database Initialization
+### 🔍 Check Database Initialization and Connection
 ```bash
-# Check download-sql InitContainer logs
-kubectl logs -n paymybuddy -l app=mysql -c download-sql
-
-# Check init-mysql InitContainer logs
-kubectl logs -n paymybuddy -l app=mysql -c init-mysql
-
-# Check MySQL container logs
-kubectl logs -n paymybuddy -l app=mysql -c mysql
+# Verify the SQL files are well mounted
+kubectl exec -n paymybuddy deployment/mysql -- ls -la /docker-entrypoint-initdb.d/
+# Verify MYSQL logs
+kubectl logs -n paymybuddy -l app=mysql | grep -i "running\|sql"
+# Verify tables' creation
+kubectl exec -n paymybuddy deployment/mysql -- mysql -u root -prootpassword db_paymybuddy -e "SHOW TABLES;"
+# Verify the data
+kubectl exec -n paymybuddy deployment/mysql -- mysql -u root -prootpassword paymybuddy -e "SELECT * FROM user;"
 ```
+![SQL files mounted](imgs/show-sql-files.png)
 
-![database init start](imgs/init-db.png)
+![MYSQL](imgs/mysql-db-creation.png)
 
-![database init 1](imgs/init-db-part1.png)
-
-![database init 2](imgs/init-db-part2.png)
-
-![database init 3](imgs/init-db-part3.png)
-
----
-
-### 🔍 Check Database Connection
-```bash
-# Connect to MySQL pod and verify tables
-kubectl exec -it -n paymybuddy deployment/mysql -- mysql -u paymybuddy -ppaymybuddy -e "SHOW DATABASES; USE paymybuddy; SHOW TABLES; SELECT * FROM user;"
-
-# Verify Spring datasource configuration
-kubectl exec -it -n paymybuddy deployment/paymybuddy -- env | grep SPRING
-```
-
-![database connection](imgs/test-mysql-connection.png)
+![Check MYSQL](imgs/mysql-db-check.png)
 
 ---
 
@@ -451,6 +405,14 @@ Then access the application:
 
 ![application home](imgs/app-web-final2.png)
 
+If we recall, the user with the email **final2022mondial@gmail.com** was not present in the database (cfrs the section **Check Database Initialization and Connection**). Now, we want to check if our new user has been added or not to the **user** table.
+
+```bash
+kubectl exec -n paymybuddy deployment/mysql -- mysql -u root -prootpassword db_paymybuddy -e "SELECT * FROM user;"
+```
+
+![user added](imgs/user-added.png)
+
 ---
 
 ### Method 2: NodePort
@@ -501,10 +463,6 @@ kubectl get pods -n paymybuddy
 
 # View pod logs
 kubectl logs -n paymybuddy -l app=paymybuddy
-
-# View InitContainer logs
-kubectl logs -n paymybuddy -l app=mysql -c download-sql
-kubectl logs -n paymybuddy -l app=mysql -c init-mysql
 
 # Describe pod for events
 kubectl describe pod -n paymybuddy -l app=paymybuddy
