@@ -531,6 +531,7 @@ kubectl rollout restart deployment/paymybuddy -n paymybuddy
 k8s/
 ├── namespace.yml                 # Namespace definition
 ├── mysql-secrets.yml             # MySQL credentials
+├── mysql-initdb-configmap.yml    # For configMap
 ├── mysql-pvc.yml                 # PersistentVolumeClaim for MySQL
 ├── mysql-deployment.yml          # MySQL deployment with InitContainers
 ├── mysql-service.yml             # MySQL ClusterIP service
@@ -538,7 +539,6 @@ k8s/
 ├── paymybuddy-service.yml        # PayMyBuddy ClusterIP service
 ├── paymybuddy-ingress.yml        # Ingress rules
 ├── paymybuddy-lb.yml             # MetalLB IP pool configuration
-└── imgs/                         # Documentation images
 ```
 
 ---

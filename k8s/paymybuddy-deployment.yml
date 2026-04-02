@@ -69,11 +69,3 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
-        volumeMounts:
-        - name: paymybuddy-data
-          mountPath: /data
-      volumes:
-      - name: paymybuddy-data
-        hostPath:
-          path: /data
-          type: DirectoryOrCreate
